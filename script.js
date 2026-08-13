@@ -164,25 +164,54 @@ tailwind.config = {
         }
 
         async function handlePDFUpload(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-
-            if (file.type !== "application/pdf") {
-                showToast("Hanya menerima file berformat PDF", "error");
-                return;
+                const files = Array.from(event.target.files);
+                if (files.length === 0) return;
+            
+                const statusEl = document.getElementById('pdf-status');
+                let successCount = 0;
+            
+                for (const file of files) {
+                    // 1. Validasi tipe file
+                    const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith('.pdf');
+                    if (!isPdf) {
+                        showToast(`File "${file.name}" ditolak karena bukan PDF`, "error");
+                        continue;
+                    }
+            
+                    // 2. Ekstrak teks per file
+                    try {
+                        await processSinglePdfFile(file);
+                        successCount++;
+                    } catch (err) {
+                        console.error(err);
+                    }
+                }
+            
+                // 3. Update status akhir
+                if (statusEl) {
+                    statusEl.innerText = `✅ Selesai mengekstrak ${successCount} dari ${files.length} file PDF! Silakan klik 'Analisis'.`;
+                }
+            
+                // 4. Reset input
+                event.target.value = '';
             }
 
-            const statusEl = document.getElementById('pdf-status');
-            statusEl.innerText = "⏳ Membaca halaman PDF, mohon tunggu...";
-            extractedPdfText = ""; 
-
-            try {
-                const fileReader = new FileReader();
-                fileReader.onload = async function() {
-                    const typedarray = new Uint8Array(this.result);
+            // Fungsi khusus membaca 1 file PDF dan menambahkan teksnya ke textarea
+            async function processSinglePdfFile(file) {
+                const statusEl = document.getElementById('pdf-status');
+                const bulkInput = document.getElementById('bulk-input');
+            
+                if (statusEl) {
+                    statusEl.innerText = `⏳ Membaca "${file.name}"...`;
+                }
+            
+                try {
+                    // Gunakan file.arrayBuffer() modern (lebih rapi dibanding FileReader)
+                    const arrayBuffer = await file.arrayBuffer();
+                    const typedarray = new Uint8Array(arrayBuffer);
                     
                     const pdf = await pdfjsLib.getDocument(typedarray).promise;
-                    let fullText = "";
+                    let fileText = "";
                     
                     for (let i = 1; i <= pdf.numPages; i++) {
                         const page = await pdf.getPage(i);
@@ -191,7 +220,7 @@ tailwind.config = {
                         let lastY = -1;
                         let pageText = "";
                         
-                        // Menyatukan baris berdasarkan tinggi sumbu-Y (dengan toleransi 5 pixel)
+                        // Menyatukan baris berdasarkan tinggi sumbu-Y (toleransi 5px)
                         textContent.items.forEach(function (item) {
                             if (lastY !== -1 && Math.abs(lastY - item.transform[5]) > 5) {
                                 pageText += "\n"; 
@@ -200,22 +229,22 @@ tailwind.config = {
                             lastY = item.transform[5];
                         });
                         
-                        fullText += pageText + "\n";
+                        fileText += pageText + "\n";
                     }
-
-                    document.getElementById('bulk-input').value = fullText;
-                    statusEl.innerText = `✅ Berhasil membaca ${pdf.numPages} halaman! Klik tombol 'Analisis' di bawah.`;
-                    showToast("PDF berhasil diekstrak menjadi teks!", "success");
-                    
-                    event.target.value = '';
-                };
-                fileReader.readAsArrayBuffer(file);
-            } catch (error) {
-                console.error("Error membaca PDF:", error);
-                statusEl.innerText = "❌ Gagal membaca PDF.";
-                showToast("Terjadi kesalahan saat membaca file PDF.", "error");
+            
+                    // ✅ TAMBAHKAN TEKS KE TEXTAREA (Gunakan += agar tidak menimpa file sebelumnya)
+                    if (bulkInput) {
+                        bulkInput.value += `\n--- [ISI FILE: ${file.name}] ---\n` + fileText + "\n";
+                    }
+            
+                    showToast(`Berhasil membaca "${file.name}"`, "success");
+            
+                } catch (error) {
+                    console.error(`Error membaca PDF (${file.name}):`, error);
+                    showToast(`Gagal membaca file "${file.name}"`, "error");
+                    throw error; // Lempar error agar ditangkap oleh block catch di handlePDFUpload
+                }
             }
-        }
 
         // SMART PARSER: Membedah data teks mutasi yang dicopy-paste + Proteksi Duplikat
         function handleBulkParse() {
