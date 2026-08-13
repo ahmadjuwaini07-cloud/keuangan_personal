@@ -48,7 +48,7 @@ tailwind.config = {
         updateTimer();
 
         // Database Init & Storage
-        let transactions = JSON.parse(localStorage.getItem('ahmad_cashflow_v2'));
+        let transactions = JSON.parse(localStorage.getItem('ahmad_cashflow_v2')) || [];
         
 
         let parsedBulkTemp = [];
@@ -258,7 +258,7 @@ tailwind.config = {
                 }
                 seenInCurrentImport.set(txSignature, true);
 
-                const isExistingInDatabase = transactions.some(existTx => {
+                const isExistingInDatabase = (transactions || []).some(existTx => {
                     return existTx.date === txDate && 
                            existTx.type === txType && 
                            existTx.amount === txAmount && 
@@ -612,7 +612,7 @@ tailwind.config = {
         // DYNAMIC YEAR FILTER INJECTOR dengan ALL YEARS
         function updateYearFilters() {
             const filterIds = ['chart-year', 'analysis-cat-year', 'stacked-year', 'ratio-year'];
-            let years = [...new Set(transactions.map(t => new Date(t.date).getFullYear().toString()))];
+            let years = [...new Set((transactions || []).map(t => new Date(t.date).getFullYear().toString()))];
             
             // Filter ringan: Hindari kesalahan NaN (Bug Fix)
             years = years.filter(y => y !== 'NaN' && !isNaN(y));
