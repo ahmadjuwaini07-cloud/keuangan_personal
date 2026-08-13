@@ -170,15 +170,16 @@ tailwind.config = {
                 const statusEl = document.getElementById('pdf-status');
                 const bulkInput = document.getElementById('bulk-input');
             
-                // ✅ 1. KOSONGKAN TEXTAREA HANYA SATU KALI DI AWAL SEBELUM LOOP
+                // 1. Kosongkan textarea dan variabel penampung di awal
                 if (bulkInput) bulkInput.value = '';
-                extractedPdfText = ""; // Kosongkan variabel penampung teks jika ada
+                if (typeof extractedPdfText !== 'undefined') extractedPdfText = "";
             
                 let successCount = 0;
+                let allExtractedTexts = []; // Penampung teks dari seluruh PDF
             
-                // ✅ 2. BACA SEMUA FILE SATU PER SATU
+                // 2. Loop memproses setiap file
                 for (const file of files) {
-                    // Validasi format PDF
+                    // Validasi ekstensi
                     const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith('.pdf');
                     if (!isPdf) {
                         showToast(`File "${file.name}" ditolak karena bukan PDF`, "error");
@@ -186,73 +187,41 @@ tailwind.config = {
                     }
             
                     try {
-                        // Membaca dan Menambahkan teks ke bulkInput (tanpa menghapus teks sebelumnya)
-                        await processSinglePdfFile(file);
-                        successCount++;
+                        // Membaca 1 file PDF
+                        const fileText = await processSinglePdfFile(file);
+                        
+                        if (fileText.trim()) {
+                            allExtractedTexts.push(`--- [ISI FILE: ${file.name}] ---\n` + fileText);
+                            successCount++;
+                        }
                     } catch (error) {
                         console.error(`Gagal membaca ${file.name}:`, error);
                     }
                 }
             
-                // ✅ 3. UPDATE STATUS SETELAH SEMUA FILE SELESAI
-                if (statusEl) {
-                    statusEl.innerText = `✅ Berhasil mengekstrak ${successCount} dari ${files.length} file PDF!`;
+                // 3. Gabungkan SELURUH teks file ke textarea sekaligus!
+                if (bulkInput && allExtractedTexts.length > 0) {
+                    bulkInput.value = allExtractedTexts.join("\n\n");
                 }
             
-                // Reset nilai input file agar siap digunakan kembali
+                // 4. Update status pesan
+                if (statusEl) {
+                    statusEl.innerText = `✅ Berhasil mengekstrak ${successCount} dari ${files.length} file PDF! Silakan klik 'Analisis'.`;
+                }
+            
+                // Reset nilai input file
                 event.target.value = '';
             }
             
+            // Fungsi murni untuk membaca 1 file PDF dan mengembalikan teksnya
             async function processSinglePdfFile(file) {
                 const statusEl = document.getElementById('pdf-status');
-                const bulkInput = document.getElementById('bulk-input');
-            
-                if (statusEl) {
-                    statusEl.innerText = `⏳ Membaca "${file.name}"...`;
-                }
-            
-                // Ambil isi file menggunakan arrayBuffer
-                const arrayBuffer = await file.arrayBuffer();
-                const typedarray = new Uint8Array(arrayBuffer);
-                
-                const pdf = await pdfjsLib.getDocument(typedarray).promise;
-                let fileText = "";
-                
-                for (let i = 1; i <= pdf.numPages; i++) {
-                    const page = await pdf.getPage(i);
-                    const textContent = await page.getTextContent();
-                    
-                    let lastY = -1;
-                    let pageText = "";
-                    
-                    textContent.items.forEach(function (item) {
-                        if (lastY !== -1 && Math.abs(lastY - item.transform[5]) > 5) {
-                            pageText += "\n"; 
-                        }
-                        pageText += item.str.trim() + " ";
-                        lastY = item.transform[5];
-                    });
-                    
-                    fileText += pageText + "\n";
-                }
-            
-                // ✅ 4. GUNAKAN OPERATOR (+=) AGAR TEKS DIGABUNGKAN (APPEND)
-                if (bulkInput) {
-                    bulkInput.value += fileText + "\n";
-                }
-            }
-
-            // Fungsi khusus membaca 1 file PDF dan menambahkan teksnya ke textarea
-            async function processSinglePdfFile(file) {
-                const statusEl = document.getElementById('pdf-status');
-                const bulkInput = document.getElementById('bulk-input');
             
                 if (statusEl) {
                     statusEl.innerText = `⏳ Membaca "${file.name}"...`;
                 }
             
                 try {
-                    // Gunakan file.arrayBuffer() modern (lebih rapi dibanding FileReader)
                     const arrayBuffer = await file.arrayBuffer();
                     const typedarray = new Uint8Array(arrayBuffer);
                     
@@ -266,7 +235,6 @@ tailwind.config = {
                         let lastY = -1;
                         let pageText = "";
                         
-                        // Menyatukan baris berdasarkan tinggi sumbu-Y (toleransi 5px)
                         textContent.items.forEach(function (item) {
                             if (lastY !== -1 && Math.abs(lastY - item.transform[5]) > 5) {
                                 pageText += "\n"; 
@@ -278,17 +246,13 @@ tailwind.config = {
                         fileText += pageText + "\n";
                     }
             
-                    // ✅ TAMBAHKAN TEKS KE TEXTAREA (Gunakan += agar tidak menimpa file sebelumnya)
-                    if (bulkInput) {
-                        bulkInput.value += `\n--- [ISI FILE: ${file.name}] ---\n` + fileText + "\n";
-                    }
-            
                     showToast(`Berhasil membaca "${file.name}"`, "success");
+                    return fileText; // Return teks string
             
                 } catch (error) {
                     console.error(`Error membaca PDF (${file.name}):`, error);
                     showToast(`Gagal membaca file "${file.name}"`, "error");
-                    throw error; // Lempar error agar ditangkap oleh block catch di handlePDFUpload
+                    throw error;
                 }
             }
 
